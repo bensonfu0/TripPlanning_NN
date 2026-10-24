@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">行程規劃</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for map rendering -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Noto Sans TC', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 14px;
+            padding: 4px 6px;
+            box-shadow: 0 12px 28px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+        .leaflet-popup-tip {
+            background: white;
+        }
+        .custom-marker-pin {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: white;
+            font-weight: 800;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 2.5px solid white;
+        }
+    </style>
+</head>
+<body id="app-body" class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Top Hero Banner Header -->
+    <header id="main-header" class="relative overflow-hidden pb-8 pt-6 px-4 md:px-8 border-b shadow-md transition-all duration-500">
+        <div id="header-pattern" class="absolute inset-0 opacity-10 bg-[radial-gradient(#64748b_1px,transparent_1px)] [background-size:16px_16px]"></div>
+        
+        <div class="max-w-7xl mx-auto relative z-10 space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                    <!-- Sheet Status -->
+                    <div class="flex flex-wrap items-center gap-2 mb-3">
+                        <div id="sheet-sync-status" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                            <i class="fa-solid fa-file-excel"></i> <span>Google Sheet 資料同步中...</span>
+                        </div>
+                    </div>
+                    
+                    <h1 id="main-title" class="text-2xl md:text-4xl font-extrabold tracking-tight flex items-center gap-3">
+                        行程規劃
+                    </h1>
+                    <p id="header-subtitle" class="text-sm md:text-base mt-2 flex items-center gap-3 font-medium opacity-90">
+                        <span><i id="header-calendar-icon" class="fa-regular fa-calendar me-1.5"></i><span id="header-date-range">行程動態載入中</span></span>
+                        <span class="opacity-40">•</span>
+                        <span><i class="fa-solid fa-location-dot text-rose-500 me-1.5"></i><span id="header-locations">載入中...</span></span>
+                    </p>
+                </div>
+
+                <!-- Refresh Sheet Button -->
+                <div class="flex items-center gap-2">
+                    <button id="refresh-btn" onclick="fetchAllGoogleSheetData()" class="px-4 py-2 font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i> 從 Google Sheet 重新同步
+                    </button>
+                </div>
+            </div>
+
+            <!-- 👔 頂部行程總覽：整趟行程綜合穿著建議 Banner -->
+            <div id="overall-weather-banner" onclick="openWeatherOverviewModal()" class="rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3.5 shadow-sm text-xs md:text-sm cursor-pointer transition transform hover:-translate-y-0.5 border">
+                <div id="overall-weather-icon-box" class="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold flex-shrink-0 border">
+                    <i class="fa-solid fa-shirt"></i>
+                </div>
+                <div class="flex-1 space-y-1">
+                    <div class="flex items-center justify-between font-bold text-xs md:text-sm">
+                        <div class="flex items-center gap-2">
+                            <span id="overall-weather-label">整趟行程打包與穿著建議</span>
+                            <span id="overall-weather-temp-badge" class="text-[10px] px-2 py-0.5 rounded-full font-medium border">氣象載入中...</span>
+                        </div>
+                        <span id="overall-weather-subbadge" class="text-[11px] flex items-center gap-1 px-2.5 py-1 rounded-lg border"><i class="fa-solid fa-arrow-up-right-from-square"></i> 查看每日預報</span>
+                    </div>
+                    <p id="overall-clothing-text" class="leading-relaxed text-xs md:text-sm opacity-90">
+                        正在分析整趟行程天氣數據並繪製打包建議...
+                    </p>
+                </div>
+            </div>
+
+            <!-- Total Trip Budget Summary Bar -->
+            <div id="trip-budget-summary" class="pt-2 border-t grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <!-- Dynamically injected -->
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Flow Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
+        
+        <!-- 1. Sticky Navigation Bar for Days Selection -->
+        <div id="sticky-nav-bar" class="sticky top-3 z-30 backdrop-blur-md rounded-2xl p-3 shadow-lg transition-colors border">
+            <div class="flex items-center justify-between px-2 mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider opacity-70 flex items-center gap-1.5">
+                    <i id="day-nav-icon" class="fa-solid fa-calendar-days"></i> 天數快速導覽
+                </span>
+                <span id="active-day-subtitle" class="text-xs px-3 py-0.5 rounded-full font-bold border">--</span>
+            </div>
+
+            <!-- Horizontal Day Tab Pills including "ALL" Mode -->
+            <div id="day-tabs-container" class="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                <!-- Day Tabs dynamically built -->
+            </div>
+        </div>
+
+        <!-- 2. Responsive Dual-Column Layout Container (Left: Itinerary, Right: Sticky Map) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- Left Column: Detailed Daily Itinerary Cards (7 cols on Desktop) -->
+            <div id="daily-itinerary-wrapper" class="lg:col-span-7 space-y-8">
+                <!-- Dynamic Daily Content Cards rendered here -->
+            </div>
+
+            <!-- Right Column: Sticky Map (5 cols on Desktop) -->
+            <section id="map-section" class="lg:col-span-5 lg:sticky lg:top-20 rounded-2xl border shadow-xl overflow-hidden flex flex-col transition-colors">
+                <div id="map-header" class="p-4 flex items-center justify-between border-b gap-2 flex-wrap transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div id="map-icon-box" class="w-9 h-9 rounded-xl flex items-center justify-center border">
+                            <i class="fa-solid fa-map-location-dot"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-sm md:text-base flex items-center gap-2">
+                                <span id="current-map-title">Google 地圖 (標準)</span>
+                                <span id="map-color-tag" class="text-[10px] px-2 py-0.5 rounded-full font-medium border">按天色彩區分</span>
+                            </h3>
+                            <p id="map-sub-text" class="text-xs opacity-70">同一天使用相同顏色，不同天以不同色彩呈現</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Map Layer Switcher & Reset (保留 Google 與 高德) -->
+                    <div class="flex items-center gap-1.5">
+                        <div id="map-provider-box" class="inline-flex p-1 rounded-xl border text-xs">
+                            <button id="btn-map-google" onclick="switchMapProvider('google')" class="px-2.5 py-1 rounded-lg font-bold transition">Google</button>
+                            <button id="btn-map-amap" onclick="switchMapProvider('amap')" class="px-2.5 py-1 rounded-lg font-bold transition">高德</button>
+                        </div>
+                        <button id="btn-map-reset" onclick="fitMapBounds()" class="px-2.5 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1 border" title="重置全景">
+                            <i class="fa-solid fa-expand"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Map Canvas -->
+                <div id="map" class="w-full h-[500px] lg:h-[calc(100vh-180px)] z-0"></div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 🔲 MODAL 1: 全行程 / 分類花費費用明細懸浮視窗 -->
+    <div id="cost-detail-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm transition-opacity">
+        <div id="cost-modal-card" class="w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]">
+            <div id="cost-modal-header" class="p-4 md:p-5 flex items-center justify-between border-b">
+                <div class="flex items-center gap-3">
+                    <div id="modal-cost-icon-bg" class="w-9 h-9 rounded-xl flex items-center justify-center text-lg">
+                        <i id="modal-cost-icon" class="fa-solid fa-wallet"></i>
+                    </div>
+                    <div>
+                        <h3 id="modal-cost-title" class="font-bold text-base md:text-lg">費用明細總覽</h3>
+                        <p id="modal-cost-subtitle" class="text-xs opacity-75">此類別包含的所有景點與花費記錄</p>
+                    </div>
+                </div>
+                <button onclick="closeCostModal()" class="w-8 h-8 rounded-xl bg-black/10 hover:bg-black/20 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div id="modal-cost-list" class="p-4 md:p-6 overflow-y-auto space-y-3 flex-1">
+                <!-- Dynamic Cost Items List -->
+            </div>
+
+            <div id="cost-modal-footer" class="p-4 border-t flex items-center justify-between">
+                <span class="text-xs opacity-75 font-medium">即時匯率自動換算結果</span>
+                <div class="text-right">
+                    <span class="text-xs opacity-75 me-1">類別總計:</span>
+                    <span id="modal-cost-total" class="text-base font-extrabold">NT$ 0 元</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔲 MODAL 2: 當日花費明細懸浮視窗 -->
+    <div id="day-cost-detail-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm transition-opacity">
+        <div id="day-cost-modal-card" class="w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]">
+            <div id="day-cost-modal-header" class="p-4 md:p-5 flex items-center justify-between border-b">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-400/30 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-receipt"></i>
+                    </div>
+                    <div>
+                        <h3 id="day-cost-modal-title" class="font-bold text-base md:text-lg">Day 1 花費明細</h3>
+                        <p id="day-cost-modal-subtitle" class="text-xs opacity-75">當日所有包含費用的行程項目</p>
+                    </div>
+                </div>
+                <button onclick="closeDayCostModal()" class="w-8 h-8 rounded-xl bg-black/10 hover:bg-black/20 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div id="day-cost-modal-list" class="p-4 md:p-6 overflow-y-auto space-y-3 flex-1">
+                <!-- Dynamic Daily Cost Items -->
+            </div>
+
+            <div id="day-cost-modal-footer" class="p-4 border-t flex items-center justify-between">
+                <span class="text-xs opacity-75 font-medium">即時匯率自動換算結果</span>
+                <div class="text-right">
+                    <span class="text-xs opacity-75 me-1">當日總計:</span>
+                    <span id="day-cost-modal-total" class="text-base font-extrabold">NT$ 0 元</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔲 MODAL 3: 整趟行程每日預估氣候懸浮視窗 -->
+    <div id="weather-overview-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm transition-opacity">
+        <div id="weather-modal-card" class="w-full max-w-3xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]">
+            <div id="weather-modal-header" class="p-4 md:p-5 flex items-center justify-between border-b">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-600 dark:text-teal-400 border border-teal-400/30 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-cloud-sun"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base md:text-lg">整趟行程每日氣候與穿搭</h3>
+                        <p class="text-xs opacity-75">跨天預報數據與打包攻略</p>
+                    </div>
+                </div>
+                <button onclick="closeWeatherModal()" class="w-8 h-8 rounded-xl bg-black/10 hover:bg-black/20 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div id="modal-weather-list" class="p-4 md:p-6 overflow-y-auto space-y-4 flex-1">
+                <!-- Dynamic Daily Weather Items List -->
+            </div>
+
+            <div id="weather-modal-footer" class="p-4 border-t text-xs opacity-75 text-center">
+                💡 氣象資料由 Open-Meteo 提供，預報會在每日動態即時同步更新。
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 border-t border-slate-800 py-6 px-4 text-center text-xs space-y-1 mt-12">
+        <p class="font-medium text-slate-350"><span id="footer-title-text">行程規劃</span> • 專屬地圖導航版</p>
+        <p class="text-slate-500">&copy; 2026 行程規劃器. All rights reserved.</p>
+    </footer>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        // ==========================================
+        // 📊 GOOGLE SHEET 連結設定
+        // ==========================================
+        const BASE_SHEET_ID = "1_ahVcayqH7ptZtJJa-YukQF7HDum12hMUU3R5y4dn5E";
+        
+        const CONFIG_CSV_URL = `https://docs.google.com/spreadsheets/d/${BASE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Config`;
+        const DAYS_CSV_URL   = `https://docs.google.com/spreadsheets/d/${BASE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Days`; 
+        const SPOTS_CSV_URL  = `https://docs.google.com/spreadsheets/d/${BASE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Spots`;
+
+        let EXCHANGE_RATES = {
+            RMB: 4.5,
+            HKD: 4.1,
+            KRW: 0.024,
+            JPY: 0.21,
+            USD: 32.0,
+            TWD: 1.0
+        };
+
+        // 🎨 主題詳細規範
+        const THEMES = {
+            "銀白光感": {
+                name: "銀白光感",
+                bodyBg: "bg-slate-100 text-slate-900",
+                headerGradient: "from-white via-slate-50 to-white",
+                headerText: "text-slate-900",
+                borderCol: "border-slate-200",
+                primaryBtnBg: "bg-slate-900 hover:bg-slate-800 text-white",
+                bannerBg: "bg-slate-200/80 hover:bg-slate-200 border-slate-300 text-slate-900 shadow-sm",
+                bannerIconBox: "bg-slate-300 text-slate-900 border-slate-300",
+                bannerTitle: "text-slate-900 font-bold",
+                badgeBg: "bg-slate-300/80 border-slate-300 text-slate-800",
+                navBg: "bg-white/90 border-slate-200 shadow-slate-200/60",
+                activeTabBg: "bg-slate-900 text-white border-slate-900",
+                inactiveTabBg: "bg-slate-200/80 hover:bg-slate-200 text-slate-800 border-slate-300 shadow-sm",
+                activeTabText: "text-white font-extrabold",
+                inactiveTabText: "text-black opacity-80",
+                iconColor: "text-blue-600",
+                navIconColor: "text-slate-600",
+                budgetItemBg: "bg-slate-200/80 hover:bg-slate-300/80 border-slate-300 text-slate-900",
+                dayMainCardBg: "bg-white border-slate-200 shadow-sm",
+                dayCardHeaderBg: "bg-slate-200/70 text-slate-900 border-slate-300 shadow-sm",
+                dayCardNumberBox: "bg-slate-900 text-white border-slate-900",
+                dayCardSubBadge: "bg-slate-300 text-slate-800 border-slate-300",
+                dayCardWeatherBox: "bg-slate-100 border-slate-300 text-slate-800",
+                dayCardCostBox: "bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-900",
+                dayCardCostText: "text-blue-600 font-bold",
+                dayCardClothesBanner: "bg-slate-200/90 border-slate-300 text-slate-800",
+                dayCardClothesTitle: "text-blue-900",
+                spotCardBg: "bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-sm",
+                spotTitleText: "text-slate-900 group-hover:text-blue-600",
+                spotTimeBadge: "bg-slate-100 text-slate-900 border-slate-200",
+                spotNotesBg: "bg-slate-100 border-slate-200 text-slate-700",
+                spotLocBtn: "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200",
+                spotLocIcon: "text-blue-600",
+                mapSectionBg: "bg-white border-slate-200 shadow-lg",
+                mapHeaderBg: "bg-slate-100 border-slate-200 text-slate-900",
+                mapColorTag: "bg-slate-200 text-blue-600 border-slate-300",
+                mapProviderBox: "bg-slate-200 border-slate-300",
+                mapBtnReset: "bg-slate-200 hover:bg-slate-300 text-slate-800 border-slate-300",
+                modalCard: "bg-white border-slate-300 text-slate-900",
+                modalHeader: "bg-slate-100 text-slate-900 border-slate-300",
+                modalFooter: "bg-slate-100 border-slate-300 text-slate-700",
+                modalBadge: "bg-black text-white border-black font-extrabold",
+                modalItemBorder: "border-slate-300 bg-slate-50/80"
+            },
+            "太空灰": {
+                name: "太空灰",
+                bodyBg: "bg-[#09090b] text-zinc-100",
+                headerGradient: "from-zinc-950 via-zinc-900 to-zinc-950",
+                headerText: "text-zinc-100",
+                borderCol: "border-zinc-800/80",
+                primaryBtnBg: "bg-zinc-100 hover:bg-zinc-200 text-zinc-900",
+                bannerBg: "bg-zinc-900/90 hover:bg-zinc-900 border-zinc-800 text-zinc-200",
+                bannerIconBox: "bg-zinc-800 text-blue-400 border-zinc-700/80",
+                bannerTitle: "text-zinc-100",
+                badgeBg: "bg-zinc-800 border-zinc-700 text-zinc-300",
+                navBg: "bg-zinc-900/95 border-zinc-800 shadow-zinc-950/50",
+                activeTabBg: "bg-zinc-100 text-zinc-900 border-zinc-200",
+                inactiveTabBg: "bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 border-zinc-700/80",
+                activeTabText: "text-black font-extrabold",
+                inactiveTabText: "text-white opacity-90",
+                iconColor: "text-blue-400",
+                navIconColor: "text-zinc-400",
+                budgetItemBg: "bg-white/10 hover:bg-white/20 border-white/20 text-white",
+                dayMainCardBg: "bg-zinc-900/80 border-zinc-800",
+                dayCardHeaderBg: "bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-zinc-900 text-zinc-100 border-zinc-800",
+                dayCardNumberBox: "bg-zinc-800 text-white border-zinc-700",
+                dayCardSubBadge: "bg-zinc-800 text-zinc-300 border-zinc-700",
+                dayCardWeatherBox: "bg-zinc-950/60 border-zinc-800 text-zinc-200",
+                dayCardCostBox: "bg-zinc-950/60 hover:bg-zinc-950 border-zinc-800 text-zinc-100",
+                dayCardCostText: "text-blue-400 font-bold",
+                dayCardClothesBanner: "bg-zinc-950/80 border-zinc-800 text-zinc-300",
+                dayCardClothesTitle: "text-zinc-100",
+                spotCardBg: "bg-zinc-900/90 hover:bg-zinc-900 border-zinc-800 text-zinc-100",
+                spotTitleText: "text-zinc-100 group-hover:text-blue-400",
+                spotTimeBadge: "bg-zinc-800 text-zinc-100 border-zinc-700",
+                spotNotesBg: "bg-zinc-950/70 border-zinc-800 text-zinc-300",
+                spotLocBtn: "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700",
+                spotLocIcon: "text-blue-400",
+                mapSectionBg: "bg-zinc-900 border-zinc-800",
+                mapHeaderBg: "bg-zinc-950 border-zinc-800 text-zinc-100",
+                mapColorTag: "bg-zinc-800 text-blue-400 border-zinc-700",
+                mapProviderBox: "bg-zinc-900 border-zinc-800",
+                mapBtnReset: "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700",
+                modalCard: "bg-zinc-900 border-zinc-700 text-zinc-100",
+                modalHeader: "bg-zinc-950 text-zinc-100 border-zinc-800",
+                modalFooter: "bg-zinc-950 border-zinc-800 text-zinc-300",
+                modalBadge: "bg-white text-black border-white font-extrabold",
+                modalItemBorder: "border-zinc-700 bg-zinc-950/70"
+            },
+            "海洋綠": {
+                name: "海洋綠",
+                bodyBg: "bg-slate-50 text-slate-800",
+                headerGradient: "from-slate-950 via-teal-950 to-slate-900",
+                headerText: "text-white",
+                borderCol: "border-teal-900/50",
+                primaryBtnBg: "bg-teal-500 hover:bg-teal-400 text-slate-950",
+                bannerBg: "bg-teal-950/80 hover:bg-teal-900/90 border-teal-500/30 text-teal-100",
+                bannerIconBox: "bg-teal-500/20 text-teal-300 border-teal-400/30",
+                bannerTitle: "text-teal-300",
+                badgeBg: "bg-teal-900/90 border-teal-400/30 text-teal-200",
+                navBg: "bg-white/95 border-slate-200 shadow-slate-200/50",
+                activeTabBg: "bg-slate-900 text-teal-300 border-slate-800",
+                inactiveTabBg: "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200",
+                activeTabText: "text-teal-300 font-extrabold",
+                inactiveTabText: "text-slate-700",
+                iconColor: "text-teal-400",
+                navIconColor: "text-teal-600",
+                budgetItemBg: "bg-white/10 hover:bg-white/20 border-white/20 text-white",
+                dayMainCardBg: "bg-white border-slate-200 shadow-sm",
+                dayCardHeaderBg: "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border-slate-800",
+                dayCardNumberBox: "bg-teal-500/20 text-teal-300 border-teal-400/30",
+                dayCardSubBadge: "bg-slate-800 text-slate-300 border-slate-700",
+                dayCardWeatherBox: "bg-slate-800/80 border-slate-700/70 text-slate-200",
+                dayCardCostBox: "bg-slate-800/80 hover:bg-slate-700/90 border-slate-700/70 text-white",
+                dayCardCostText: "text-emerald-300",
+                dayCardClothesBanner: "bg-teal-950/60 border-teal-500/30 text-teal-200",
+                dayCardClothesTitle: "text-teal-300",
+                spotCardBg: "bg-white hover:bg-slate-50/90 border-slate-200/90 text-slate-900 shadow-sm",
+                spotTitleText: "text-slate-900 group-hover:text-teal-700",
+                spotTimeBadge: "bg-slate-100 text-slate-900 border-slate-200",
+                spotNotesBg: "bg-slate-50 border-slate-200/80 text-slate-600",
+                spotLocBtn: "bg-teal-50 hover:bg-teal-100/80 text-slate-900 border-teal-200/60",
+                spotLocIcon: "text-teal-600",
+                mapSectionBg: "bg-white border-slate-200 shadow-xl",
+                mapHeaderBg: "bg-slate-900 border-slate-800 text-white",
+                mapColorTag: "bg-amber-500/20 text-amber-300 border-amber-400/30",
+                mapProviderBox: "bg-slate-800 border-slate-700",
+                mapBtnReset: "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700",
+                modalCard: "bg-white border-slate-200 text-slate-900",
+                modalHeader: "bg-slate-900 text-white border-slate-800",
+                modalFooter: "bg-slate-50 border-slate-200 text-slate-700",
+                modalBadge: "bg-teal-500/20 text-teal-800 border-teal-300 font-extrabold",
+                modalItemBorder: "border-slate-200 bg-slate-50"
+            },
+            emerald: "海洋綠",
+            spacegray: "太空灰",
+            silver: "銀白光感"
+        };
+
+        const DAY_COLORS = [
+            "#059669", "#2563eb", "#d97706", "#9333ea", "#e11d48", "#4f46e5",
+            "#0d9488", "#ca8a04", "#db2777", "#7c3aed", "#0284c7", "#16a34a",
+            "#ea580c", "#6366f1", "#be185d", "#475569", "#ca0404", "#047857",
+            "#701a75", "#1e40af", "#b45309", "#3b82f6", "#10b981", "#f59e0b",
+            "#8b5cf6", "#f43f5e", "#06b6d4", "#84cc16", "#a855f7", "#64748b"
+        ];
+
+        const categoryMeta = {
+            "餐飲": { name: "餐飲", icon: "fa-utensils", bg: "bg-amber-500/20", text: "text-amber-600 dark:text-amber-300", badgeColor: "bg-amber-100 text-amber-800 border-amber-200" },
+            "購物": { name: "購物", icon: "fa-bag-shopping", bg: "bg-purple-500/20", text: "text-purple-600 dark:text-purple-300", badgeColor: "bg-purple-100 text-purple-800 border-purple-200" },
+            "景點": { name: "景點", icon: "fa-camera", bg: "bg-emerald-500/20", text: "text-emerald-600 dark:text-emerald-300", badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+            "特色體驗": { name: "特色體驗", icon: "fa-wand-magic-sparkles", bg: "bg-rose-500/20", text: "text-rose-600 dark:text-rose-300", badgeColor: "bg-rose-100 text-rose-800 border-rose-200" },
+            "交通": { name: "交通", icon: "fa-plane", bg: "bg-blue-500/20", text: "text-blue-600 dark:text-blue-300", badgeColor: "bg-blue-100 text-blue-800 border-blue-200" },
+            "住宿": { name: "住宿", icon: "fa-hotel", bg: "bg-indigo-500/20", text: "text-indigo-600 dark:text-indigo-300", badgeColor: "bg-indigo-100 text-indigo-800 border-indigo-200" }
+        };
+
+        function getCategoryMeta(catName) {
+            const cleaned = (catName || "").trim();
+            if (categoryMeta[cleaned]) {
+                return categoryMeta[cleaned];
+            }
+            return { name: cleaned || "一般行程", icon: "fa-compass", bg: "bg-teal-500/20", text: "text-teal-600 dark:text-teal-300", badgeColor: "bg-teal-100 text-teal-800 border-teal-200" };
+        }
+
+        function getDayColor(dayNum) {
+            const index = (dayNum - 1) % DAY_COLORS.length;
+            return DAY_COLORS[index];
+        }
+
+        function generateClothingAdvisory(tMin, tMax, wcode, rainProb) {
+            let advice = [];
+            const diff = tMax - tMin;
+
+            if (tMax < 12) {
+                advice.push("寒冷，建議羽絨外套、保暖內衣及毛帽手套");
+            } else if (tMax < 18) {
+                advice.push("偏冷，建議防風外套、厚針織衫或刷毛上衣");
+            } else if (tMax < 24) {
+                advice.push("涼爽舒適，適合薄長袖搭配薄外套或風衣");
+            } else if (tMax < 28) {
+                advice.push("溫和偏熱，建議短袖上衣，室內可備薄襯衫");
+            } else {
+                advice.push("炎熱，建議透氣棉麻短袖、防曬衣物及墨鏡");
+            }
+
+            if (diff >= 8) {
+                advice.push("日夜溫差大，強烈建議洋蔥式穿搭以便增減衣物");
+            }
+
+            const probNum = parseInt(rainProb) || 0;
+            if (probNum >= 40 || (wcode >= 51 && wcode <= 67)) {
+                advice.push("有降雨機會，請隨身攜帶折傘及穿著防水靴鞋");
+            } else if (wcode === 0 || wcode === 1) {
+                advice.push("陽光充足，戶外行程請注意曬後補充水分與防曬");
+            }
+
+            return advice.join('；') + '。';
+        }
+
+        function updateOverallClothingSummary() {
+            const validDaysWithTemp = tripData.days.filter(d => d.weather && d.weather.tempMin !== undefined);
+            const badgeEl = document.getElementById('overall-weather-temp-badge');
+            const textEl = document.getElementById('overall-clothing-text');
+
+            if (validDaysWithTemp.length === 0) {
+                badgeEl.textContent = "尚未取得近 14 天預報";
+                textEl.textContent = "氣象預報發布時間尚未涵蓋此行程日期，建議出發前一週密切留意當地氣溫，準備適合季節的基礎衣物。";
+                return;
+            }
+
+            let globalMin = 999;
+            let globalMax = -999;
+            let maxRainProb = 0;
+            let rainyDaysCount = 0;
+
+            validDaysWithTemp.forEach(d => {
+                if (d.weather.tempMin < globalMin) globalMin = d.weather.tempMin;
+                if (d.weather.tempMax > globalMax) globalMax = d.weather.tempMax;
+                const rVal = parseInt(d.weather.rainProb) || 0;
+                if (rVal > maxRainProb) maxRainProb = rVal;
+                if (rVal >= 40) rainyDaysCount++;
+            });
+
+            badgeEl.textContent = `旅程全期間溫差：${globalMin}°C - ${globalMax}°C`;
+
+            let overallAdvice = [];
+            const tempDiff = globalMax - globalMin;
+
+            if (globalMax < 15) {
+                overallAdvice.push("整趟旅程偏冷至寒冷，請準備禦寒羽絨外套、發熱衣及毛帽等保暖配件");
+            } else if (globalMin > 23) {
+                overallAdvice.push("整趟旅程炎熱舒適，行李以輕便透氣短袖為主，並攜帶防曬外套或遮陽帽");
+            } else if (tempDiff >= 10) {
+                overallAdvice.push(`全趟溫差達 ${tempDiff}°C，請務必採取多層次「洋蔥式穿搭」，攜帶易於收納的保暖外套`);
+            } else {
+                overallAdvice.push("氣溫整體適中，建議以舒適長/短袖為主，並隨身準備一件防風薄外套");
+            }
+
+            if (rainyDaysCount > 0) {
+                overallAdvice.push(`行程中有 ${rainyDaysCount} 天降雨機率較高 (最高 ${maxRainProb}%)，請打包輕便折傘與防水機能鞋`);
+            } else {
+                overallAdvice.push("整體降雨機率低，適合戶外漫步，建議準備好穿耐走的好鞋");
+            }
+
+            textEl.textContent = overallAdvice.join('；') + '。';
+        }
+
+        let tripData = {
+            title: "行程規劃",
+            locations: "各景點",
+            dateRange: "",
+            colorTheme: "銀白光感",
+            days: []
+        };
+
+        let selectedDayFilter = "ALL";
+        let map = null;
+        let currentMapProvider = 'google';
+        let currentTileLayer = null;
+        let mapMarkers = [];
+        let routePolylines = [];
+
+        // 地圖圖層僅保留 Google 與 高德 (Amap)
+        const MAP_PROVIDERS = {
+            google: {
+                title: "Google 地圖 (標準)",
+                url: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+                subdomains: [],
+                attribution: '&copy; Google Maps'
+            },
+            amap: {
+                title: "高德地圖 (Amap)",
+                url: "https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+                subdomains: ["1", "2", "3", "4"],
+                attribution: '&copy; 高德地圖 (Amap)'
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            initLeafletMap();
+            await fetchLatestExchangeRates();
+            fetchAllGoogleSheetData();
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeCostModal();
+                    closeDayCostModal();
+                    closeWeatherModal();
+                }
+            });
+        });
+
+        async function fetchLatestExchangeRates() {
+            try {
+                const res = await fetch("https://open.er-api.com/v6/latest/TWD");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.rates) {
+                        if (data.rates.CNY) EXCHANGE_RATES.RMB = 1 / data.rates.CNY;
+                        if (data.rates.HKD) EXCHANGE_RATES.HKD = 1 / data.rates.HKD;
+                        if (data.rates.KRW) EXCHANGE_RATES.KRW = 1 / data.rates.KRW;
+                        if (data.rates.JPY) EXCHANGE_RATES.JPY = 1 / data.rates.JPY;
+                        if (data.rates.USD) EXCHANGE_RATES.USD = 1 / data.rates.USD;
+                    }
+                }
+            } catch (err) {
+                console.warn("無法取得即時匯率，使用預設匯率：", err);
+            }
+        }
+
+        function initLeafletMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                scrollWheelZoom: false
+            }).setView([22.35, 114.0], 11);
+
+            applyTileLayer(currentMapProvider);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+        }
+
+        function getActiveTheme() {
+            let key = tripData.colorTheme;
+            if (THEMES[key]) {
+                if (typeof THEMES[key] === 'string') {
+                    key = THEMES[key];
+                }
+                return THEMES[key];
+            }
+            return THEMES["銀白光感"];
+        }
+
+        function applyTileLayer(providerKey) {
+            if (currentTileLayer) {
+                map.removeLayer(currentTileLayer);
+            }
+
+            const config = MAP_PROVIDERS[providerKey] || MAP_PROVIDERS.google;
+            currentMapProvider = providerKey;
+
+            currentTileLayer = L.tileLayer(config.url, {
+                subdomains: config.subdomains,
+                attribution: config.attribution,
+                maxZoom: 18,
+                minZoom: 4
+            }).addTo(map);
+
+            document.getElementById('current-map-title').textContent = config.title;
+
+            const btnGoogle = document.getElementById('btn-map-google');
+            const btnAmap = document.getElementById('btn-map-amap');
+
+            const theme = getActiveTheme();
+            const activeClass = `px-2.5 py-1 rounded-lg font-bold transition ${theme.primaryBtnBg} shadow`;
+            const inactiveClass = "px-2.5 py-1 rounded-lg font-bold transition opacity-60 hover:opacity-100";
+
+            if (btnGoogle) btnGoogle.className = providerKey === 'google' ? activeClass : inactiveClass;
+            if (btnAmap) btnAmap.className = providerKey === 'amap' ? activeClass : inactiveClass;
+        }
+
+        function switchMapProvider(providerKey) {
+            if (currentMapProvider === providerKey) return;
+            applyTileLayer(providerKey);
+            showToast(`已切換為 ${MAP_PROVIDERS[providerKey].title}`, "info");
+        }
+
+        // 自動地點判斷：若包含中國大陸或韓國關鍵字，自動切換高德地圖；其餘預設 Google
+        function autoDetectAndSetMapProvider(locationStr, titleStr) {
+            const combinedText = `${locationStr} ${titleStr}`.toLowerCase();
+            const amapKeywords = [
+                "中國", "中国", "大陸", "大陆", "深圳", "廣州", "广州", "北京", "上海", "成都", "重慶", "重庆", "廈門", "厦门", "珠海", "杭州",
+                "韓國", "韩国", "首爾", "首尔", "釜山", "濟州", "济州", "仁川", "明洞", "弘大", "korea", "seoul", "busan"
+            ];
+
+            let targetProvider = 'google';
+            if (amapKeywords.some(kw => combinedText.includes(kw))) {
+                targetProvider = 'amap';
+            }
+
+            applyTileLayer(targetProvider);
+        }
+
+        async function fetchAllGoogleSheetData() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+            try {
+                try {
+                    const configRes = await fetch(CONFIG_CSV_URL + "&t=" + new Date().getTime());
+                    if (configRes.ok) {
+                        const configCsv = await configRes.text();
+                        parseConfigCSV(configCsv);
+                    }
+                } catch (e) { console.warn("Config 讀取略過", e); }
+
+                const daysRes = await fetch(DAYS_CSV_URL + "&t=" + new Date().getTime());
+                if (!daysRes.ok) throw new Error("讀取 Days 失敗");
+                const daysCsv = await daysRes.text();
+                parseDaysCSV(daysCsv);
+
+                const spotsRes = await fetch(SPOTS_CSV_URL + "&t=" + new Date().getTime());
+                if (!spotsRes.ok) throw new Error("讀取 Spots 失敗");
+                const spotsCsv = await spotsRes.text();
+                parseSpotsCSV(spotsCsv);
+
+                document.getElementById('main-title').textContent = tripData.title;
+                document.getElementById('page-title').textContent = `${tripData.title} - 行程規劃`;
+                document.getElementById('footer-title-text').textContent = tripData.title;
+                document.getElementById('header-locations').textContent = tripData.locations;
+
+                applyThemeStyles();
+
+                if (tripData.days.length > 0) {
+                    const firstDate = tripData.days[0].date || "";
+                    const lastDate = tripData.days[tripData.days.length - 1].date || "";
+                    tripData.dateRange = `${firstDate.split(',')[0]} - ${lastDate.split(',')[0]}`;
+                    document.getElementById('header-date-range').textContent = tripData.dateRange;
+                }
+
+                autoDetectAndSetMapProvider(tripData.locations, tripData.title);
+
+                document.getElementById('sheet-sync-status').className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold";
+                document.getElementById('sheet-sync-status').innerHTML = '<i class="fa-solid fa-file-excel"></i> <span>已從 Google Sheet 同步主題與配色</span>';
+
+                showToast("已成功同步最新主題與配色！", "success");
+            } catch (error) {
+                console.warn("無法從 Google Sheet 抓取資料：", error);
+                document.getElementById('sheet-sync-status').className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-700 dark:text-amber-300 text-xs font-semibold";
+                document.getElementById('sheet-sync-status').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <span>Google Sheet 連線異常</span>';
+                showToast("無法讀取 Google Sheet，請檢查共用權限", "info");
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+                renderApp();
+                await fetchDateMatchedWeather();
+            }
+        }
+
+        function applyThemeStyles() {
+            const theme = getActiveTheme();
+
+            // Whole Body Background
+            document.getElementById('app-body').className = `${theme.bodyBg} antialiased min-h-screen flex flex-col transition-colors duration-300`;
+
+            // Header Background & Text
+            const header = document.getElementById('main-header');
+            header.className = `relative bg-gradient-to-r ${theme.headerGradient} ${theme.headerText} overflow-hidden pb-8 pt-6 px-4 md:px-8 border-b ${theme.borderCol} shadow-md transition-all duration-500`;
+
+            // Refresh Button
+            const refreshBtn = document.getElementById('refresh-btn');
+            refreshBtn.className = `px-4 py-2 ${theme.primaryBtnBg} font-bold text-xs rounded-xl shadow transition flex items-center gap-1.5`;
+
+            // Overall Weather Banner
+            const weatherBanner = document.getElementById('overall-weather-banner');
+            weatherBanner.className = `${theme.bannerBg} rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3.5 shadow-sm text-xs md:text-sm cursor-pointer transition transform hover:-translate-y-0.5 border`;
+
+            const iconBox = document.getElementById('overall-weather-icon-box');
+            iconBox.className = `w-10 h-10 rounded-xl ${theme.bannerIconBox} flex items-center justify-center text-lg font-bold flex-shrink-0 border`;
+
+            const weatherLabel = document.getElementById('overall-weather-label');
+            weatherLabel.className = `font-bold ${theme.bannerTitle} text-xs md:text-sm`;
+
+            const tempBadge = document.getElementById('overall-weather-temp-badge');
+            tempBadge.className = `text-[10px] ${theme.badgeBg} px-2 py-0.5 rounded-full font-medium border`;
+
+            const subBadge = document.getElementById('overall-weather-subbadge');
+            subBadge.className = `text-[11px] flex items-center gap-1 ${theme.badgeBg} px-2.5 py-1 rounded-lg border`;
+
+            // Sticky Navigation Bar
+            const stickyNav = document.getElementById('sticky-nav-bar');
+            stickyNav.className = `sticky top-3 z-30 ${theme.navBg} backdrop-blur-md rounded-2xl p-3 shadow-lg transition-colors border`;
+
+            const activeDaySub = document.getElementById('active-day-subtitle');
+            activeDaySub.className = `text-xs px-3 py-0.5 rounded-full font-bold ${theme.badgeBg}`;
+
+            // Map Section Whole Area連動
+            const mapSection = document.getElementById('map-section');
+            mapSection.className = `lg:col-span-5 lg:sticky lg:top-20 ${theme.mapSectionBg} rounded-2xl border shadow-xl overflow-hidden flex flex-col transition-colors`;
+
+            const mapHeader = document.getElementById('map-header');
+            mapHeader.className = `p-4 ${theme.mapHeaderBg} flex items-center justify-between border-b gap-2 flex-wrap transition-colors`;
+
+            const mapIconBox = document.getElementById('map-icon-box');
+            mapIconBox.className = `w-9 h-9 rounded-xl ${theme.bannerIconBox} flex items-center justify-center border`;
+
+            const mapColorTag = document.getElementById('map-color-tag');
+            mapColorTag.className = `text-[10px] ${theme.mapColorTag} px-2 py-0.5 rounded-full font-medium border`;
+
+            const mapProviderBox = document.getElementById('map-provider-box');
+            mapProviderBox.className = `inline-flex ${theme.mapProviderBox} p-1 rounded-xl border text-xs`;
+
+            const btnMapReset = document.getElementById('btn-map-reset');
+            btnMapReset.className = `${theme.mapBtnReset} px-2.5 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-1 border`;
+
+            // Calendar & Nav Icons
+            document.getElementById('header-calendar-icon').className = `fa-regular fa-calendar ${theme.iconColor} me-1.5`;
+            document.getElementById('day-nav-icon').className = `fa-solid fa-calendar-days ${theme.navIconColor}`;
+        }
+
+        function applyModalTheme() {
+            const theme = getActiveTheme();
+
+            // Modal 1: 費用明細總覽
+            const cCard = document.getElementById('cost-modal-card');
+            const cHeader = document.getElementById('cost-modal-header');
+            const cFooter = document.getElementById('cost-modal-footer');
+            if (cCard) cCard.className = `${theme.modalCard} w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]`;
+            if (cHeader) cHeader.className = `p-4 md:p-5 ${theme.modalHeader} flex items-center justify-between border-b`;
+            if (cFooter) cFooter.className = `p-4 ${theme.modalFooter} border-t flex items-center justify-between`;
+
+            // Modal 2: 當日花費明細
+            const dCard = document.getElementById('day-cost-modal-card');
+            const dHeader = document.getElementById('day-cost-modal-header');
+            const dFooter = document.getElementById('day-cost-modal-footer');
+            if (dCard) dCard.className = `${theme.modalCard} w-full max-w-2xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]`;
+            if (dHeader) dHeader.className = `p-4 md:p-5 ${theme.modalHeader} flex items-center justify-between border-b`;
+            if (dFooter) dFooter.className = `p-4 ${theme.modalFooter} border-t flex items-center justify-between`;
+
+            // Modal 3: 氣象預報總覽
+            const wCard = document.getElementById('weather-modal-card');
+            const wHeader = document.getElementById('weather-modal-header');
+            const wFooter = document.getElementById('weather-modal-footer');
+            if (wCard) wCard.className = `${theme.modalCard} w-full max-w-3xl rounded-2xl shadow-2xl border overflow-hidden flex flex-col max-h-[85vh]`;
+            if (wHeader) wHeader.className = `p-4 md:p-5 ${theme.modalHeader} flex items-center justify-between border-b`;
+            if (wFooter) wFooter.className = `p-4 ${theme.modalFooter} border-t text-xs text-center opacity-75`;
+        }
+
+        function parseCSVRows(text) {
+            let rows = [];
+            let row = [];
+            let inQuotes = false;
+            let field = '';
+            
+            for (let i = 0; i < text.length; i++) {
+                let c = text[i];
+                let nextC = text[i + 1];
+                
+                if (inQuotes) {
+                    if (c === '"' && nextC === '"') {
+                        field += '"';
+                        i++;
+                    } else if (c === '"') {
+                        inQuotes = false;
+                    } else {
+                        field += c;
+                    }
+                } else {
+                    if (c === '"') {
+                        inQuotes = true;
+                    } else if (c === ',') {
+                        row.push(field);
+                        field = '';
+                    } else if (c === '\r' && nextC === '\n') {
+                        row.push(field);
+                        rows.push(row);
+                        row = [];
+                        field = '';
+                        i++;
+                    } else if (c === '\n' || c === '\r') {
+                        row.push(field);
+                        rows.push(row);
+                        row = [];
+                        field = '';
+                    } else {
+                        field += c;
+                    }
+                }
+            }
+            if (field !== '' || row.length > 0) {
+                row.push(field);
+                rows.push(row);
+            }
+            return rows;
+        }
+
+        function parseConfigCSV(csvText) {
+            const rows = parseCSVRows(csvText);
+            for (let i = 1; i < rows.length; i++) {
+                const cols = rows[i];
+                if (!cols || cols.length < 2) continue;
+                const key = cols[0] ? cols[0].trim().toLowerCase() : "";
+                const val = cols[1] ? cols[1].trim() : "";
+                if (key === "main_title" && val) tripData.title = val;
+                if (key === "locations" && val) tripData.locations = val;
+                if ((key === "color" || key === "color_theme") && val) {
+                    const themeInput = val.trim();
+                    if (THEMES[themeInput]) {
+                        tripData.colorTheme = themeInput;
+                    } else {
+                        const found = Object.keys(THEMES).find(k => k.toLowerCase() === themeInput.toLowerCase());
+                        if (found) {
+                            tripData.colorTheme = found;
+                        }
+                    }
+                }
+            }
+        }
+
+        function parseDaysCSV(csvText) {
+            const rows = parseCSVRows(csvText);
+            tripData.days = [];
+            if (rows.length <= 1) return;
+
+            for (let i = 1; i < rows.length; i++) {
+                const cols = rows[i];
+                if (!cols || cols.length < 4) continue;
+
+                const dayNum = parseInt(cols[0]) || i;
+                const dateStr = cols[1] || "";
+                const dateStringVal = cols[2] || "";
+                const themeStr = cols[3] || "精彩行程";
+                const areaStr = cols[4] || "";
+                const latVal = parseFloat(cols[5]) || 22.35;
+                const lngVal = parseFloat(cols[6]) || 114.0;
+
+                tripData.days.push({
+                    dayNum: dayNum,
+                    date: dateStr,
+                    dateString: dateStringVal,
+                    theme: themeStr,
+                    area: areaStr,
+                    lat: latVal,
+                    lng: lngVal,
+                    spots: []
+                });
+            }
+        }
+
+        function parseSpotsCSV(csvText) {
+            const rows = parseCSVRows(csvText);
+            if (rows.length <= 1) return;
+
+            const clean = (val) => {
+                if (val === undefined || val === null) return "";
+                return String(val).trim().replace(/^"|"$/g, '').trim();
+            };
+
+            for (let i = 1; i < rows.length; i++) {
+                const cols = rows[i];
+                if (!cols || cols.length === 0) continue;
+
+                const dayNum = parseInt(clean(cols[0])) || 1;
+                const timeStr = clean(cols[2]) !== "" ? clean(cols[2]) : "";
+                const catStr = clean(cols[3]) || "景點";
+                const titleStr = clean(cols[4]);
+                const costVal = parseFloat(clean(cols[5])) || 0;
+                const currStr = clean(cols[6]) || "USD";
+                const latVal = parseFloat(clean(cols[7])) || 0;
+                const lngVal = parseFloat(clean(cols[8])) || 0;
+                const mapUrlStr = clean(cols[9]);
+                const notesStr = clean(cols[10]);
+
+                const targetDay = tripData.days.find(d => d.dayNum === dayNum);
+                if (targetDay && titleStr) {
+                    targetDay.spots.push({
+                        id: `sheet_${dayNum}_${i}`,
+                        time: timeStr,
+                        category: catStr,
+                        title: titleStr,
+                        cost: costVal,
+                        currency: currStr,
+                        lat: latVal || targetDay.lat,
+                        lng: lngVal || targetDay.lng,
+                        mapUrl: mapUrlStr,
+                        notes: notesStr
+                    });
+                }
+            }
+        }
+
+        function renderApp() {
+            renderHeaderBudgetSummary();
+            renderDayTabs();
+            renderItineraryWrapper();
+            updateMapMarkersAndRoute();
+        }
+
+        async function fetchDateMatchedWeather() {
+            const todayObj = new Date();
+            
+            for (let day of tripData.days) {
+                if (!day.dateString) continue;
+                
+                const targetDate = new Date(day.dateString);
+                const diffTime = targetDate - todayObj;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays < -1 || diffDays > 14) {
+                    day.weather = {
+                        temp: "--",
+                        status: "尚未預測",
+                        icon: "fa-clock",
+                        sunrise: "尚未預測",
+                        sunset: "尚未預測",
+                        rainProb: "尚未預測",
+                        clothingAdvice: "氣象預報發布時間未到，建議參考當地季節平均氣溫穿著。"
+                    };
+                    continue;
+                }
+
+                try {
+                    const lat = day.lat || 22.35;
+                    const lng = day.lng || 114.15;
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max,weather_code&timezone=auto`;
+                    
+                    const res = await fetch(url);
+                    const data = await res.json();
+
+                    if (data && data.daily && data.daily.time) {
+                        const index = data.daily.time.findIndex(t => t === day.dateString);
+                        if (index !== -1) {
+                            const tMax = Math.round(data.daily.temperature_2m_max[index]);
+                            const tMin = Math.round(data.daily.temperature_2m_min[index]);
+                            const wcode = data.daily.weather_code[index];
+                            const rainProbVal = (data.daily.precipitation_probability_max[index] !== null) ? data.daily.precipitation_probability_max[index] + "%" : "0%";
+                            
+                            let status = "晴朗", icon = "fa-sun";
+                            if (wcode >= 1 && wcode <= 3) { status = "多雲"; icon = "fa-cloud-sun"; }
+                            else if (wcode >= 45 && wcode <= 48) { status = "有霧"; icon = "fa-smog"; }
+                            else if (wcode >= 51 && wcode <= 67) { status = "陣雨"; icon = "fa-cloud-rain"; }
+
+                            const advisory = generateClothingAdvisory(tMin, tMax, wcode, rainProbVal);
+
+                            day.weather = {
+                                tempMin: tMin,
+                                tempMax: tMax,
+                                temp: `${tMin}°C - ${tMax}°C`,
+                                status: status,
+                                icon: icon,
+                                sunrise: data.daily.sunrise[index] ? data.daily.sunrise[index].substring(11, 16) : "尚未預測",
+                                sunset: data.daily.sunset[index] ? data.daily.sunset[index].substring(11, 16) : "尚未預測",
+                                rainProb: rainProbVal,
+                                clothingAdvice: advisory
+                            };
+                        }
+                    }
+                } catch (err) {}
+            }
+
+            updateOverallClothingSummary();
+            renderItineraryWrapper();
+        }
+
+        function renderHeaderBudgetSummary() {
+            let totalTWD = 0;
+            const categoryTotals = {
+                "餐飲": 0,
+                "購物": 0,
+                "景點": 0,
+                "特色體驗": 0,
+                "交通": 0,
+                "住宿": 0
+            };
+
+            tripData.days.forEach(day => {
+                if (day.spots) {
+                    day.spots.forEach(s => {
+                        const amt = Number(s.cost) || 0;
+                        const curr = (s.currency || "").toUpperCase();
+                        let spotTWD = 0;
+
+                        if (curr === "RMB" || curr === "CNY") {
+                            spotTWD = amt * EXCHANGE_RATES.RMB;
+                        } else if (curr === "HKD") {
+                            spotTWD = amt * EXCHANGE_RATES.HKD;
+                        } else if (curr === "KRW") {
+                            spotTWD = amt * EXCHANGE_RATES.KRW;
+                        } else if (curr === "JPY") {
+                            spotTWD = amt * EXCHANGE_RATES.JPY;
+                        } else if (curr === "USD") {
+                            spotTWD = amt * EXCHANGE_RATES.USD;
+                        } else if (curr === "TWD" || curr === "NTD") {
+                            spotTWD = amt;
+                        } else {
+                            spotTWD = amt;
+                        }
+
+                        totalTWD += spotTWD;
+
+                        const catKey = categoryMeta[s.category] ? s.category : "景點";
+                        categoryTotals[catKey] = (categoryTotals[catKey] || 0) + spotTWD;
+                    });
+                }
+            });
+
+            const theme = getActiveTheme();
+
+            const container = document.getElementById('trip-budget-summary');
+            let html = `
+                <div onclick="openCostDetailModal('ALL')" class="flex items-center gap-3 ${theme.budgetItemBg} rounded-xl p-2.5 px-3.5 shadow-sm cursor-pointer transition transform hover:-translate-y-0.5 border">
+                    <div class="w-8 h-8 rounded-lg ${theme.bannerIconBox} flex items-center justify-center font-bold text-sm border"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <p class="text-[11px] opacity-80 uppercase font-semibold">整趟行程預估總額</p>
+                            <i class="fa-solid fa-angle-right text-[10px] opacity-60"></i>
+                        </div>
+                        <p class="text-xs font-bold ${theme.bannerTitle} truncate">NT$ ${Math.round(totalTWD).toLocaleString()} 元</p>
+                    </div>
+                </div>
+            `;
+
+            Object.keys(categoryTotals).forEach(catKey => {
+                const twdAmt = categoryTotals[catKey];
+                if (twdAmt > 0) {
+                    const meta = categoryMeta[catKey] || categoryMeta["景點"];
+                    html += `
+                        <div onclick="openCostDetailModal('${catKey}')" class="flex items-center gap-3 ${theme.budgetItemBg} rounded-xl p-2.5 px-3.5 shadow-sm cursor-pointer transition transform hover:-translate-y-0.5 border">
+                            <div class="w-8 h-8 rounded-lg ${meta.bg} ${meta.text} flex items-center justify-center font-bold text-sm"><i class="fa-solid ${meta.icon}"></i></div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-[11px] opacity-80 uppercase font-semibold truncate">${meta.name}</p>
+                                    <i class="fa-solid fa-angle-right text-[10px] opacity-60"></i>
+                                </div>
+                                <p class="text-xs font-bold ${meta.text} truncate">NT$ ${Math.round(twdAmt).toLocaleString()} 元</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            container.innerHTML = html;
+        }
+
+        // ==========================================
+        // 🔲 MODAL 1 邏輯：全行程 / 分類花費明細彈窗
+        // ==========================================
+        function openCostDetailModal(categoryKey) {
+            applyModalTheme();
+            const theme = getActiveTheme();
+            const modal = document.getElementById('cost-detail-modal');
+            const iconBg = document.getElementById('modal-cost-icon-bg');
+            const iconEl = document.getElementById('modal-cost-icon');
+            const titleEl = document.getElementById('modal-cost-title');
+            const listEl = document.getElementById('modal-cost-list');
+            const totalEl = document.getElementById('modal-cost-total');
+
+            let matchedSpots = [];
+            let totalTWD = 0;
+
+            if (categoryKey === 'ALL') {
+                iconBg.className = "w-9 h-9 rounded-xl bg-teal-500/20 text-teal-600 dark:text-teal-300 border border-teal-400/30 flex items-center justify-center text-lg";
+                iconEl.className = "fa-solid fa-wallet";
+                titleEl.textContent = "全行程費用明細";
+
+                tripData.days.forEach(day => {
+                    if (day.spots) {
+                        day.spots.forEach(s => {
+                            if (Number(s.cost) > 0) {
+                                matchedSpots.push({ ...s, dayNum: day.dayNum, date: day.date });
+                            }
+                        });
+                    }
+                });
+            } else {
+                const meta = categoryMeta[categoryKey] || categoryMeta["景點"];
+                iconBg.className = `w-9 h-9 rounded-xl ${meta.bg} ${meta.text} flex items-center justify-center text-lg`;
+                iconEl.className = `fa-solid ${meta.icon}`;
+                titleEl.textContent = `${meta.name} 費用明細`;
+
+                tripData.days.forEach(day => {
+                    if (day.spots) {
+                        day.spots.forEach(s => {
+                            if (s.category === categoryKey && Number(s.cost) > 0) {
+                                matchedSpots.push({ ...s, dayNum: day.dayNum, date: day.date });
+                            }
+                        });
+                    }
+                });
+            }
+
+            if (matchedSpots.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-10 opacity-60 font-medium">
+                        <i class="fa-solid fa-receipt text-3xl mb-2"></i>
+                        <p>此類別目前尚無費用紀錄</p>
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = matchedSpots.map(s => {
+                    const amt = Number(s.cost) || 0;
+                    const curr = (s.currency || "USD").toUpperCase();
+                    let spotTWD = 0;
+
+                    if (curr === "RMB" || curr === "CNY") spotTWD = amt * EXCHANGE_RATES.RMB;
+                    else if (curr === "HKD") spotTWD = amt * EXCHANGE_RATES.HKD;
+                    else if (curr === "KRW") spotTWD = amt * EXCHANGE_RATES.KRW;
+                    else if (curr === "JPY") spotTWD = amt * EXCHANGE_RATES.JPY;
+                    else if (curr === "USD") spotTWD = amt * EXCHANGE_RATES.USD;
+                    else spotTWD = amt;
+
+                    totalTWD += spotTWD;
+
+                    const catMeta = categoryMeta[s.category] || categoryMeta["景點"];
+                    let currSymbol = `${curr} $`;
+
+                    return `
+                        <div class="flex items-center justify-between ${theme.modalItemBorder} border rounded-xl p-3 transition shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs ${theme.modalBadge} px-2.5 py-1 rounded-lg border">D${s.dayNum}</span>
+                                <div>
+                                    <h4 class="font-extrabold text-xs md:text-sm">${s.title}</h4>
+                                    <p class="text-[11px] opacity-75 mt-0.5"><i class="fa-regular fa-clock me-1"></i>${s.time || '全天'} • <span class="font-medium ${catMeta.text}">${catMeta.name}</span></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-extrabold text-xs md:text-sm block">${currSymbol} ${amt.toLocaleString()}</span>
+                                <span class="text-[10px] opacity-75 font-semibold">≈ NT$ ${Math.round(spotTWD).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            totalEl.textContent = `NT$ ${Math.round(totalTWD).toLocaleString()} 元`;
+            modal.classList.remove('hidden');
+        }
+
+        function closeCostModal() {
+            document.getElementById('cost-detail-modal').classList.add('hidden');
+        }
+
+        // ==========================================
+        // 🔲 MODAL 2 邏輯：單日（當日）花費明細彈窗
+        // ==========================================
+        function openDayCostModal(dayNum) {
+            applyModalTheme();
+            const theme = getActiveTheme();
+            const day = tripData.days.find(d => d.dayNum === dayNum);
+            if (!day) return;
+
+            const modal = document.getElementById('day-cost-detail-modal');
+            const titleEl = document.getElementById('day-cost-modal-title');
+            const subtitleEl = document.getElementById('day-cost-modal-subtitle');
+            const listEl = document.getElementById('day-cost-modal-list');
+            const totalEl = document.getElementById('day-cost-modal-total');
+
+            titleEl.textContent = `Day ${day.dayNum} 花費明細 - ${day.theme}`;
+            subtitleEl.textContent = `${day.date} • 共 ${day.spots ? day.spots.filter(s => Number(s.cost) > 0).length : 0} 筆費用項目`;
+
+            let dayCostSpots = (day.spots || []).filter(s => Number(s.cost) > 0);
+            let dayTotalTWD = 0;
+
+            if (dayCostSpots.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-10 opacity-60 font-medium">
+                        <i class="fa-solid fa-wallet text-3xl mb-2"></i>
+                        <p>當日行程目前尚無費用紀錄</p>
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = dayCostSpots.map((s, index) => {
+                    const amt = Number(s.cost) || 0;
+                    const curr = (s.currency || "USD").toUpperCase();
+                    let spotTWD = 0;
+
+                    if (curr === "RMB" || curr === "CNY") spotTWD = amt * EXCHANGE_RATES.RMB;
+                    else if (curr === "HKD") spotTWD = amt * EXCHANGE_RATES.HKD;
+                    else if (curr === "KRW") spotTWD = amt * EXCHANGE_RATES.KRW;
+                    else if (curr === "JPY") spotTWD = amt * EXCHANGE_RATES.JPY;
+                    else if (curr === "USD") spotTWD = amt * EXCHANGE_RATES.USD;
+                    else spotTWD = amt;
+
+                    dayTotalTWD += spotTWD;
+
+                    const catMeta = categoryMeta[s.category] || categoryMeta["景點"];
+                    let currSymbol = `${curr} $`;
+
+                    return `
+                        <div class="flex items-center justify-between ${theme.modalItemBorder} border rounded-xl p-3 transition shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="w-7 h-7 rounded-lg ${theme.modalBadge} border flex items-center justify-center text-xs">${index + 1}</span>
+                                <div>
+                                    <h4 class="font-extrabold text-xs md:text-sm">${s.title}</h4>
+                                    <p class="text-[11px] opacity-75 mt-0.5"><i class="fa-regular fa-clock me-1"></i>${s.time || '全天'} • <span class="font-semibold ${catMeta.text}">${catMeta.name}</span></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-extrabold text-xs md:text-sm block">${currSymbol} ${amt.toLocaleString()}</span>
+                                <span class="text-[10px] opacity-75 font-semibold">≈ NT$ ${Math.round(spotTWD).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            totalEl.textContent = `NT$ ${Math.round(dayTotalTWD).toLocaleString()} 元`;
+            modal.classList.remove('hidden');
+        }
+
+        function closeDayCostModal() {
+            document.getElementById('day-cost-detail-modal').classList.add('hidden');
+        }
+
+        // ==========================================
+        // 🔲 MODAL 3 邏輯：整趟氣候與穿搭彈窗
+        // ==========================================
+        function openWeatherOverviewModal() {
+            applyModalTheme();
+            const theme = getActiveTheme();
+            const modal = document.getElementById('weather-overview-modal');
+            const listEl = document.getElementById('modal-weather-list');
+
+            if (tripData.days.length === 0) {
+                listEl.innerHTML = `<div class="text-center py-10 opacity-60">目前尚無行程日期資料</div>`;
+            } else {
+                listEl.innerHTML = tripData.days.map(d => {
+                    const w = d.weather || {
+                        temp: "--",
+                        status: "尚未預測",
+                        icon: "fa-clock",
+                        sunrise: "尚未預測",
+                        sunset: "尚未預測",
+                        rainProb: "尚未預測",
+                        clothingAdvice: "氣象預報發布時間未到，建議參考當地季節平均氣溫穿著。"
+                    };
+
+                    return `
+                        <div class="${theme.modalItemBorder} border rounded-2xl p-4 space-y-3 shadow-sm">
+                            <div class="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-2.5">
+                                <div class="flex items-center gap-2.5">
+                                    <span class="w-8 h-8 rounded-xl ${theme.modalBadge} border flex items-center justify-center text-xs">D${d.dayNum}</span>
+                                    <div>
+                                        <h4 class="font-bold text-xs md:text-sm">${d.theme} ${d.area ? `<span class="text-[10px] bg-black/10 dark:bg-white/10 font-semibold px-2 py-0.5 rounded-full border border-black/10">${d.area}</span>` : ''}</h4>
+                                        <p class="text-[11px] opacity-75"><i class="fa-regular fa-calendar me-1 text-teal-500"></i>${d.date}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-xs font-bold text-amber-500 block"><i class="fa-solid ${w.icon} me-1"></i>${w.status}</span>
+                                    <span class="text-[11px] font-semibold opacity-85">${w.temp}</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-[11px]">
+                                <div class="bg-black/5 dark:bg-white/5 p-2 rounded-xl border border-black/10 dark:border-white/10 flex items-center gap-2">
+                                    <i class="fa-solid fa-cloud-showers-heavy text-sky-500"></i>
+                                    <span>降雨機率：<strong class="text-sky-600 dark:text-sky-400">${w.rainProb}</strong></span>
+                                </div>
+                                <div class="bg-black/5 dark:bg-white/5 p-2 rounded-xl border border-black/10 dark:border-white/10 flex items-center gap-2">
+                                    <i class="fa-solid fa-sun text-rose-500"></i>
+                                    <span>日出/落：<strong class="opacity-85">${w.sunrise === '尚未預測' ? '未提供' : `${w.sunrise} / ${w.sunset}`}</strong></span>
+                                </div>
+                            </div>
+
+                            <!-- 穿著點評框框與底色完全比照降雨機率/日出落 -->
+                            <div class="bg-black/5 dark:bg-white/5 p-2.5 rounded-xl border border-black/10 dark:border-white/10 text-xs flex items-start gap-2">
+                                <i class="fa-solid fa-shirt text-teal-600 dark:text-teal-400 mt-0.5"></i>
+                                <span><strong>穿著點評：</strong>${w.clothingAdvice}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeWeatherModal() {
+            document.getElementById('weather-overview-modal').classList.add('hidden');
+        }
+
+        function renderDayTabs() {
+            const container = document.getElementById('day-tabs-container');
+            container.innerHTML = '';
+
+            const theme = getActiveTheme();
+            const isAll = selectedDayFilter === "ALL";
+
+            const allBtn = document.createElement('button');
+            allBtn.onclick = () => switchDayFilter("ALL");
+            allBtn.className = `px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-1.5 border ${
+                isAll ? `${theme.activeTabBg} shadow-md scale-[1.02]` : theme.inactiveTabBg
+            }`;
+            allBtn.innerHTML = `<i class="fa-solid fa-layer-group ${theme.iconColor}"></i> <span class="${isAll ? theme.activeTabText : theme.inactiveTabText}">全部行程 (DAY 1-${tripData.days.length})</span>`;
+            container.appendChild(allBtn);
+
+            tripData.days.forEach((day) => {
+                const isActive = selectedDayFilter === day.dayNum;
+                const btn = document.createElement('button');
+                btn.onclick = () => switchDayFilter(day.dayNum);
+                btn.className = `px-3.5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-2 border ${
+                    isActive ? `${theme.activeTabBg} shadow-md scale-[1.02]` : theme.inactiveTabBg
+                }`;
+                btn.innerHTML = `<span class="${isActive ? theme.activeTabText : theme.inactiveTabText}">D${day.dayNum}</span><span>•</span><span class="${isActive ? theme.activeTabText : theme.inactiveTabText}">${day.theme}</span>`;
+                container.appendChild(btn);
+            });
+
+            const subtitle = document.getElementById('active-day-subtitle');
+            subtitle.textContent = isAll ? `全覽模式` : (tripData.days.find(d => d.dayNum === selectedDayFilter)?.date || '');
+        }
+
+        function switchDayFilter(filter) {
+            selectedDayFilter = filter;
+            renderDayTabs();
+            renderItineraryWrapper();
+            updateMapMarkersAndRoute();
+        }
+
+        function renderItineraryWrapper() {
+            const wrapper = document.getElementById('daily-itinerary-wrapper');
+            wrapper.innerHTML = '';
+            const daysToRender = selectedDayFilter === "ALL" ? tripData.days : tripData.days.filter(d => d.dayNum === selectedDayFilter);
+            daysToRender.forEach(day => wrapper.appendChild(createDayCardElement(day)));
+        }
+
+        function createDayCardElement(day) {
+            const theme = getActiveTheme();
+            const dayCard = document.createElement('div');
+            dayCard.className = `${theme.dayMainCardBg} rounded-2xl p-5 md:p-6 space-y-6 overflow-hidden transition-colors border shadow-sm`;
+            
+            let dayTotalTWD = 0;
+            if (day.spots) {
+                day.spots.forEach(s => {
+                    const amt = Number(s.cost) || 0;
+                    const curr = (s.currency || "").toUpperCase();
+                    if (curr === "RMB" || curr === "CNY") dayTotalTWD += amt * EXCHANGE_RATES.RMB;
+                    else if (curr === "HKD") dayTotalTWD += amt * EXCHANGE_RATES.HKD;
+                    else if (curr === "KRW") dayTotalTWD += amt * EXCHANGE_RATES.KRW;
+                    else if (curr === "JPY") dayTotalTWD += amt * EXCHANGE_RATES.JPY;
+                    else if (curr === "USD") dayTotalTWD += amt * EXCHANGE_RATES.USD;
+                    else if (curr === "TWD" || curr === "NTD") dayTotalTWD += amt;
+                    else dayTotalTWD += amt;
+                });
+            }
+
+            const weather = day.weather || {
+                temp: "--",
+                status: "尚未預測",
+                icon: "fa-clock",
+                sunrise: "尚未預測",
+                sunset: "尚未預測",
+                rainProb: "尚未預測",
+                clothingAdvice: "氣象預報發布時間未到，建議參考當地季節平均氣溫穿著。"
+            };
+
+            dayCard.innerHTML = `
+                <div class="${theme.dayCardHeaderBg} rounded-2xl p-5 shadow-sm border space-y-4 transition-colors">
+                    <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-black/10">
+                        <div class="flex items-center space-x-3.5">
+                            <div class="w-12 h-12 rounded-2xl ${theme.dayCardNumberBox} flex items-center justify-center text-xl font-black shadow-sm border">D${day.dayNum}</div>
+                            <div>
+                                <h3 class="text-lg md:text-xl font-bold flex items-center gap-2">${day.theme} ${day.area ? `<span class="text-xs ${theme.dayCardSubBadge} font-semibold px-2.5 py-0.5 rounded-full border">${day.area}</span>` : ''}</h3>
+                                <p class="text-xs opacity-80 mt-0.5"><i class="fa-regular fa-calendar me-1"></i>${day.date}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2.5 text-xs">
+                        <div class="${theme.dayCardWeatherBox} rounded-xl p-2 px-3 border flex items-center space-x-2.5">
+                            <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-500 flex items-center justify-center text-sm"><i class="fa-solid ${weather.icon}"></i></div>
+                            <div><p class="text-[10px] opacity-75 font-medium">氣象預報</p><p class="font-bold">${weather.status} • ${weather.temp}</p></div>
+                        </div>
+                        <div class="${theme.dayCardWeatherBox} rounded-xl p-2 px-3 border flex items-center space-x-2.5">
+                            <div class="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-500 flex items-center justify-center text-sm"><i class="fa-solid fa-sun"></i></div>
+                            <div><p class="text-[10px] opacity-75 font-medium">日出 / 日落</p><p class="font-bold">${weather.sunrise === '尚未預測' ? '尚未預測' : `🌅 ${weather.sunrise} / 🌇 ${weather.sunset}`}</p></div>
+                        </div>
+                        <div class="${theme.dayCardWeatherBox} rounded-xl p-2 px-3 border flex items-center space-x-2.5">
+                            <div class="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-500 flex items-center justify-center text-sm"><i class="fa-solid fa-cloud-showers-heavy"></i></div>
+                            <div><p class="text-[10px] opacity-75 font-medium">降雨機率</p><p class="font-bold">${weather.rainProb === '尚未預測' ? '尚未預測' : `💧 ${weather.rainProb}`}</p></div>
+                        </div>
+
+                        <!-- 💡 點擊可觸發當日花費彈窗 -->
+                        <div onclick="openDayCostModal(${day.dayNum})" class="${theme.dayCardCostBox} cursor-pointer transition transform hover:-translate-y-0.5 rounded-xl p-2 px-3 border flex items-center justify-between space-x-2 text-xs">
+                            <div class="flex items-center space-x-2.5 min-w-0">
+                                <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-sm flex-shrink-0"><i class="fa-solid fa-wallet"></i></div>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] opacity-75 font-medium">當日花費總額 (折合)</p>
+                                    <p class="font-extrabold ${theme.dayCardCostText} text-xs truncate">NT$ ${Math.round(dayTotalTWD).toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <i class="fa-solid fa-circle-chevron-right opacity-70 text-xs flex-shrink-0"></i>
+                        </div>
+                    </div>
+
+                    <!-- 👔 動態單日穿著建議 Banner -->
+                    <div class="${theme.dayCardClothesBanner} border rounded-xl p-3 flex items-start gap-2.5 text-xs">
+                        <div class="w-6 h-6 rounded-lg bg-black/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fa-solid fa-shirt"></i>
+                        </div>
+                        <div class="flex-1">
+                            <span class="font-bold me-1.5 ${theme.dayCardClothesTitle}">當日穿著建議：</span>
+                            <span class="opacity-95">${weather.clothingAdvice}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative pl-1 md:pl-2 space-y-5 before:absolute before:left-[17px] md:before:left-[21px] before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-300/40">
+                    ${renderTimelineSpotItems(day)}
+                </div>
+            `;
+            return dayCard;
+        }
+
+        function renderTimelineSpotItems(day) {
+            if (!day.spots || day.spots.length === 0) {
+                return `<div class="text-center py-8 px-4 opacity-50 rounded-2xl border border-dashed border-slate-400/30"><p class="text-sm font-medium">此天尚無安排行程項目</p></div>`;
+            }
+
+            const theme = getActiveTheme();
+
+            return day.spots.map((spot, index) => {
+                const meta = categoryMeta[spot.category] || categoryMeta["景點"];
+                
+                const timeBadgeHtml = (spot.time && spot.time !== "")
+                    ? `<span class="text-xs font-extrabold ${theme.spotTimeBadge} px-2 py-0.5 rounded-lg border"><i class="fa-regular fa-clock me-1 text-teal-500"></i>${spot.time}</span>`
+                    : '';
+
+                const curr = (spot.currency || "USD").toUpperCase();
+                let currSymbol = `${curr} $`;
+                
+                const costDisplay = (spot.cost && Number(spot.cost) > 0)
+                    ? `<span class="text-xs font-bold ${theme.spotTimeBadge} px-2 py-0.5 rounded-lg border"><i class="fa-solid fa-receipt text-emerald-500 me-1"></i>${currSymbol} ${spot.cost}</span>`
+                    : '';
+
+                const mapButtonHtml = (spot.mapUrl && spot.mapUrl.trim() !== "")
+                    ? `<a href="${spot.mapUrl}" target="_blank" rel="noopener noreferrer" class="${theme.spotLocBtn} font-bold flex items-center gap-1.5 px-3 py-1 rounded-xl border transition"><i class="fa-solid fa-diamond-turn-right ${theme.spotLocIcon}"></i> 前往地圖</a>`
+                    : '';
+
+                let notesHtml = '';
+                if (spot.notes && spot.notes.trim() !== "") {
+                    const noteLines = spot.notes.split(/\r?\n/);
+                    const linesContent = noteLines.map(line => `
+                        <div class="flex items-start space-x-1.5">
+                            <i class="fa-solid fa-circle-info text-teal-500 mt-0.5 flex-shrink-0"></i>
+                            <span class="leading-relaxed">${line}</span>
+                        </div>
+                    `).join('');
+                    notesHtml = `<div class="text-xs ${theme.spotNotesBg} rounded-xl p-2.5 mt-2.5 border space-y-1.5">${linesContent}</div>`;
+                }
+
+                return `
+                    <div id="spot-card-${spot.id}" class="relative flex items-start space-x-3 group transition-all duration-200">
+                        <div class="relative z-10 flex-shrink-0 w-8 h-8 md:w-9 md:h-9 rounded-full bg-slate-900 text-white font-extrabold text-xs flex items-center justify-center shadow-md border-2 border-white group-hover:scale-110 transition">${index + 1}</div>
+
+                        <div class="flex-1 ${theme.spotCardBg} rounded-2xl p-4 border shadow-sm hover:shadow-md transition">
+                            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                                        ${timeBadgeHtml}
+                                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full border ${meta.badgeColor || meta.color}"><i class="fa-solid ${meta.icon} me-1"></i>${meta.name}</span>
+                                        ${costDisplay}
+                                    </div>
+
+                                    <h4 class="font-extrabold text-base md:text-lg mt-2 ${theme.spotTitleText} transition cursor-pointer" onclick="focusMapSpot('${spot.id}', ${day.dayNum})">${spot.title}</h4>
+
+                                    ${notesHtml}
+
+                                    <div class="mt-3 pt-2.5 border-t border-black/10 flex items-center justify-between text-xs flex-wrap gap-2">
+                                        <div class="flex items-center space-x-2">
+                                            <button onclick="focusMapSpot('${spot.id}', ${day.dayNum})" class="${theme.spotLocBtn} font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-xl border transition"><i class="fa-solid fa-location-crosshairs ${theme.spotLocIcon}"></i> 地圖定位</button>
+                                            ${mapButtonHtml}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateMapMarkersAndRoute() {
+            mapMarkers.forEach(m => map.removeLayer(m));
+            mapMarkers = [];
+            routePolylines.forEach(r => map.removeLayer(r));
+            routePolylines = [];
+
+            const daysToInclude = selectedDayFilter === "ALL" ? tripData.days : tripData.days.filter(d => d.dayNum === selectedDayFilter);
+
+            daysToInclude.forEach(day => {
+                if (!day.spots) return;
+                const dayLatLngs = [];
+                const dayColor = getDayColor(day.dayNum);
+
+                day.spots.forEach((spot, index) => {
+                    const meta = categoryMeta[spot.category] || categoryMeta["景點"];
+                    const latLng = [spot.lat || day.lat, spot.lng || day.lng];
+                    dayLatLngs.push(latLng);
+
+                    const customIcon = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div class="custom-marker-pin" style="background-color: ${dayColor}; width: 32px; height: 32px;">${index + 1}</div>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    });
+
+                    const marker = L.marker(latLng, { icon: customIcon }).addTo(map);
+                    const popupMapLinkHtml = (spot.mapUrl && spot.mapUrl.trim() !== "")
+                        ? `<a href="${spot.mapUrl}" target="_blank" rel="noopener noreferrer" class="text-teal-600 font-bold hover:underline"><i class="fa-solid fa-diamond-turn-right me-0.5"></i>前往地圖</a>`
+                        : '';
+
+                    const cleanPopupContent = `
+                        <div class="p-2 space-y-1.5 max-w-[210px]">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded font-extrabold">DAY ${day.dayNum} • 第 ${index + 1} 站</span>
+                                <span class="text-[10px] font-bold text-slate-500">${meta.name}</span>
+                            </div>
+                            <h4 class="font-extrabold text-xs text-slate-900 leading-snug pt-0.5">${spot.title}</h4>
+                            <div class="pt-1 text-[10px] text-slate-500 flex items-center justify-between border-t border-slate-100 mt-1 gap-2">
+                                <span><i class="fa-regular fa-clock text-teal-600 me-1"></i>${spot.time}</span>
+                                ${popupMapLinkHtml}
+                            </div>
+                        </div>
+                    `;
+                    marker.bindPopup(cleanPopupContent);
+                    marker.spotId = spot.id;
+                    mapMarkers.push(marker);
+                });
+
+                if (dayLatLngs.length > 1) {
+                    const poly = L.polyline(dayLatLngs, {
+                        color: dayColor,
+                        weight: 4,
+                        opacity: 0.85,
+                        dashArray: '6, 8',
+                        lineCap: 'round'
+                    }).addTo(map);
+                    routePolylines.push(poly);
+                }
+            });
+
+            fitMapBounds();
+        }
+
+        function fitMapBounds() {
+            if (mapMarkers.length > 0) {
+                const group = L.featureGroup(mapMarkers);
+                map.fitBounds(group.getBounds().pad(0.2));
+            }
+        }
+
+        function focusMapSpot(spotId, dayNum) {
+            const marker = mapMarkers.find(m => m.spotId === spotId);
+            if (window.innerWidth < 1024) document.getElementById('map-section').scrollIntoView({ behavior: 'smooth' });
+            if (marker) {
+                setTimeout(() => {
+                    map.setView(marker.getLatLng(), 15, { animate: true });
+                    marker.openPopup();
+                }, window.innerWidth < 1024 ? 350 : 50);
+            }
+        }
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgClass = type === "success" ? "bg-teal-600 text-white" : "bg-slate-900 text-white";
+
+            toast.className = `${bgClass} px-4 py-2.5 rounded-xl shadow-xl text-xs md:text-sm font-semibold flex items-center gap-2 transform transition-all duration-300 translate-y-4 opacity-0 pointer-events-auto border border-white/10`;
+            toast.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>${message}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.remove('translate-y-4', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
