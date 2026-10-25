@@ -955,7 +955,11 @@
                 const timeStr = clean(cols[2]) !== "" ? clean(cols[2]) : "";
                 const catStr = clean(cols[3]) || "景點";
                 const titleStr = clean(cols[4]);
-                const costVal = parseFloat(clean(cols[5])) || 0;
+                
+                // 支援帶逗號的數值格式或一般文字格式金額
+                const rawCost = clean(cols[5]);
+                const costVal = parseFloat(rawCost.replace(/,/g, '')) || 0;
+
                 const currStr = clean(cols[6]) || "USD";
                 const latVal = parseFloat(clean(cols[7])) || 0;
                 const lngVal = parseFloat(clean(cols[8])) || 0;
@@ -1520,7 +1524,7 @@
                 let currSymbol = `${curr} $`;
                 
                 const costDisplay = (spot.cost && Number(spot.cost) > 0)
-                    ? `<span class="text-xs font-bold ${theme.spotTimeBadge} px-2 py-0.5 rounded-lg border"><i class="fa-solid fa-receipt text-emerald-500 me-1"></i>${currSymbol} ${spot.cost}</span>`
+                    ? `<span class="text-xs font-bold ${theme.spotTimeBadge} px-2 py-0.5 rounded-lg border"><i class="fa-solid fa-receipt text-emerald-500 me-1"></i>${currSymbol} ${Number(spot.cost).toLocaleString()}</span>`
                     : '';
 
                 const mapButtonHtml = (spot.mapUrl && spot.mapUrl.trim() !== "")
